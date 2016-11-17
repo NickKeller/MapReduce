@@ -7,6 +7,7 @@
 #include <sstream>
 #include <iterator>
 #include <algorithm>
+#include <cstdlib>
 
 /* CS6210_TASK: Create your data structure here for storing spec from the config file */
 struct MapReduceSpec {
@@ -97,17 +98,37 @@ inline bool read_mr_spec_from_config_file(const std::string& config_filename, Ma
 /* CS6210_TASK: validate the specification read from the config file */
 inline bool validate_mr_spec(const MapReduceSpec& mr_spec) {
 	//for now, print out all of the members
-	std::cout << mr_spec.config_filename << std::endl;
-	std::cout << mr_spec.num_workers << std::endl;
+	std::cout << "Config file: " << mr_spec.config_filename << std::endl;
+	std::cout << "Number of Workers: " << mr_spec.num_workers << std::endl;
+	std::cout << "Worker IP Addresses: " << std::endl;
 	for(auto worker : mr_spec.worker_ipaddr_ports){
-		std::cout << worker << std::endl;
+		std::cout << "\t" << worker << std::endl;
 	}
+	std::cout << "Input Files: " << std::endl;
 	for(auto input : mr_spec.input_files){
-		std::cout << input << std::endl;
+		std::cout << "\t" << input << std::endl;
 	}
-	std::cout << mr_spec.output_dir << std::endl;
-	std::cout << mr_spec.num_output_files << std::endl;
-	std::cout << mr_spec.map_kilobytes << std::endl;
-	std::cout << mr_spec.user_id << std::endl;
+	std::cout << "Output Dir: " << mr_spec.output_dir << std::endl;
+	std::cout << "Number of output files: " << mr_spec.num_output_files << std::endl;
+	std::cout << "Number of kilobytes in each shard: " << mr_spec.map_kilobytes << std::endl;
+	std::cout << "User ID: " << mr_spec.user_id << std::endl;
+
+	//make sure that num_workers and the number of workers given matches
+	if(mr_spec.num_workers != mr_spec.worker_ipaddr_ports.size()){
+		std::cout << "ERROR!! Number of workers doesn't match." << std::endl;
+		std::cout << "Number of workers given: " << mr_spec.num_workers << std::endl;
+		std::cout << "Number or worker ip addresses given: " << mr_spec.worker_ipaddr_ports.size() << std::endl;
+		return false;
+	}
+
+	//make sure that the input files exist
+	for(auto input_file : mr_spec.input_files){
+		std::ifstream test(input_file.c_str());
+		if(!test.good()){
+			std::cout << "ERROR!! Input file: " << input_file << " doesn't exist!" << std::endl;
+			return false;
+		}
+	}
+
 	return true;
 }
