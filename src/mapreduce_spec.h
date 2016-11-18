@@ -8,6 +8,7 @@
 #include <iterator>
 #include <algorithm>
 #include <cstdlib>
+#include <sys/stat.h>
 
 /* CS6210_TASK: Create your data structure here for storing spec from the config file */
 struct MapReduceSpec {
@@ -128,6 +129,12 @@ inline bool validate_mr_spec(const MapReduceSpec& mr_spec) {
 			std::cout << "ERROR!! Input file: " << input_file << " doesn't exist!" << std::endl;
 			return false;
 		}
+	}
+
+	//make sure that the output directory exists
+	struct stat sb;
+	if(!(stat(mr_spec.output_dir, &sb) == 0 && S_ISDIR(sb.st_mode))){
+		std::cout << "ERROR!! Output Directory: " << mr_spec.output_dir << " doesn't exist!" << std::endl;
 	}
 
 	return true;
