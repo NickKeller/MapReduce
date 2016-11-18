@@ -14,6 +14,7 @@ struct file_key_offset{
 	//[startOffset,endOffset)
 	int startOffset;
 	int endOffset;
+
 };
 struct FileShard {
 	std::vector<file_key_offset*> pieces;
