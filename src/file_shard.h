@@ -54,6 +54,21 @@ inline bool shard_files(const MapReduceSpec& mr_spec, std::vector<FileShard>& fi
 			file.seekg(cur_offset + num_to_seek);
 			piece->filename = filename;
 			piece->startOffset = cur_offset;
+			//before we set the end offset,
+			//find the next newline character from this point
+			//only do it if we didn't seek to the end of file
+			if(num_to_seek != size_left){
+				std::cout << "Finding next newline character" << std::endl;
+				char c;
+				int nl_offset = 0;
+				while(c != '\n'){
+					file.get(c);
+					nl_offset++;
+				}
+				std::cout << "Found newline character" << std::endl;
+				std::cout << "Character: " << c << "BLAH" << std::endl;
+				cur_offset += nl_offset;
+			}
 			piece->endOffset = file.tellg();
 			std::cout << "start: " << piece->startOffset << " end: " << piece->endOffset << std::endl;
 			//push the piece back onto the shard
