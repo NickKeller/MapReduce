@@ -17,6 +17,7 @@ struct file_key_offset{
 
 };
 struct FileShard {
+	int shard_id;
 	std::vector<file_key_offset*> pieces;
 };
 
@@ -30,6 +31,7 @@ inline bool shard_files(const MapReduceSpec& mr_spec, std::vector<FileShard>& fi
 	int totalsize;
 	FileShard* shard = new FileShard;
 	int bytes_used = 0;
+	int shard_id = 0;
 	for(auto filename : filenames){
 		std::cout << "New file: " << filename << std::endl;
 		std::ifstream file(filename,std::ifstream::ate | std::ifstream::binary);
@@ -77,9 +79,12 @@ inline bool shard_files(const MapReduceSpec& mr_spec, std::vector<FileShard>& fi
 			piece = new file_key_offset;
 			bytes_used += num_to_seek;
 			if(bytes_used >= mr_spec.map_kilobytes*1000){
-				std::cout << "Shard done" << std::endl;
+				//set the shard id
+				shard->shard_id =  shard_id;
 				fileShards.push_back(*shard);
+				std::cout << "Shard done, id: " << shard->shard_id << std::endl;
 				shard = new FileShard;
+				shard_id++;
 				bytes_used = 0;
 			}
 			//do this so that if we are at the end of a file, it will try to read one more bit
