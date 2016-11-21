@@ -17,12 +17,12 @@ MR_WORKER_LIB = ../external/lib/libmr_worker.a
 
 all: system-check $(MAPREDUCE_LIB) $(MR_WORKER_LIB)
 
-$(MAPREDUCE_LIB): mapreduce.o mapreduce_impl.o masterworker.pb.o masterworker.grpc.pb.o
-	ar -rcs $@ mapreduce.o mapreduce_impl.o masterworker.pb.o masterworker.grpc.pb.o
+$(MAPREDUCE_LIB): masterworker.pb.o masterworker.grpc.pb.o mapreduce_impl.o mapreduce.o
+	ar -rcs $@ masterworker.pb.o masterworker.grpc.pb.o mapreduce_impl.o mapreduce.o
 	ranlib $@
 
-$(MR_WORKER_LIB): run_worker.o mr_task_factory.o masterworker.pb.o masterworker.grpc.pb.o
-	ar -rcs $@ run_worker.o mr_task_factory.o masterworker.pb.o masterworker.grpc.pb.o
+$(MR_WORKER_LIB): masterworker.pb.o masterworker.grpc.pb.o mr_task_factory.o run_worker.o
+	ar -rcs $@ masterworker.pb.o masterworker.grpc.pb.o mr_task_factory.o run_worker.o
 	ranlib $@
 
 %.o: %.cc
