@@ -1,3 +1,36 @@
 syntax = "proto3";
 
 package masterworker;
+
+service AssignTask {
+    rpc DoTask(TaskRequest) returns (TaskReply){}
+}
+
+message TaskRequest{
+    enum JobType{
+        MAP = 0;
+        REDUCE = 1;
+        ALIVE = 2;
+    }
+    string user_id = 1;
+    string job_id = 2;
+    JobType job = 3;
+    string in_fname = 4;
+    
+    // this might need to be repeated depending on how many outfiles
+    string out_fname = 5;
+    // other stuff as we need it
+}
+
+message TaskReply{
+    enum JobType{
+        MAP = 0;
+        REDUCE = 1;
+        ALIVE = 2;
+    }
+    string job_name = 1;
+    string location = 2;
+    JobType job = 3
+    // other stuff as we need it
+}
+
