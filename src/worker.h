@@ -56,8 +56,8 @@ class Worker {
 				// Take in the "service" instance (in this case representing an asynchronous
 				// server) and the completion queue "cq" used for asynchronous communication
 				// with the gRPC runtime.
-				CallData(AssignTask::AsyncService* service, ServerCompletionQueue* cq, int q_id_)
-					: service_(service), cq_(cq), responder_(&ctx_), status_(CREATE), q_id(q_id_) {
+				CallData(AssignTask::AsyncService* service, ServerCompletionQueue* cq, int q_id_, Worker* wrkr_)
+					: service_(service), cq_(cq), responder_(&ctx_), status_(CREATE), q_id(q_id_),wrkr(wrkr_) {
 						// Invoke the serving logic right away.
 						Proceed();
 					}
@@ -79,7 +79,7 @@ class Worker {
                             case (TaskRequest::ALIVE):
                                 {
                                     //do heartbeat stuff
-                                    Worker::get_status();
+                                    auto stat = wrkr->get_status();
                                     ret_val = ALIVE;
                                     break;
                                 }
@@ -87,7 +87,7 @@ class Worker {
                             case (TaskRequest::MAP):
                                 {
                                     std::cout << "MAPPING"<< std::endl;
-                                    Worker::set_status(RUNNING);
+                                    wrkr->set_status(RUNNING);
                                     auto mapper = get_mapper_from_task_factory("cs6210");
                                     mapper->map("some_input_map");
                                     ret_val = MAP;
@@ -97,7 +97,7 @@ class Worker {
                             case (TaskRequest::REDUCE): 
                                 {
                                     std::cout << "REDUCING"<< std::endl;
-                                    Worker::set_status(RUNNING);
+                                    wrkr->set_status(RUNNING);
                                     auto reducer = get_reducer_from_task_factory("cs6210");
                                     reducer->reduce("some_input_key_reduce", std::vector<std::string>({"some_input_vals_reduce"}));
                                     ret_val = REDUCE;
@@ -143,6 +143,7 @@ class Worker {
 				TaskReply reply_;
                 int q_id;
                 JobType ret_val;
+                Worker* wrkr;
 
 				// The means to get back to the client.
 				ServerAsyncResponseWriter<TaskReply> responder_;
@@ -174,8 +175,8 @@ Worker::Worker(std::string ip_addr_port): task_responder(&task_ctx), wrk_status(
 
     // We only need 2 functions out of these workers. map/reduce and heartbeat
     // since the grpc example code is stateless, we needed to keep track that we are mapping / reducing and still alive
-    mini_workers.emplace_back(&task_service, task_cq.get(),0);
-    mini_workers.emplace_back(&task_service, task_cq.get(),1);
+    mini_workers.emplace_back(&task_service, task_cq.get(),0,this);
+    mini_workers.emplace_back(&task_service, task_cq.get(),1,this);
 
 }
 
