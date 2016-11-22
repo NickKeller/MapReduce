@@ -1,3 +1,4 @@
+#!/usr/bin/env perl
 chdir "src/" || die "Couldn't change dir to src/\n$!\n";
 my $return = system("make clean");
 unless($return){
