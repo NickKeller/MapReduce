@@ -56,7 +56,7 @@ class Worker {
 				// Take in the "service" instance (in this case representing an asynchronous
 				// server) and the completion queue "cq" used for asynchronous communication
 				// with the gRPC runtime.
-				CallData(AssignTask::AsyncService* service, ServerCompletionQueue* cq, int q_id_, Worker* wrkr_)
+				CallData(AssignTask::AsyncService* service, ServerCompletionQueue* cq, int *q_id_, Worker* wrkr_)
 					: service_(service), cq_(cq), responder_(&ctx_), status_(CREATE), q_id(q_id_),wrkr(wrkr_) {
 						// Invoke the serving logic right away.
 						Proceed();
@@ -70,11 +70,12 @@ class Worker {
 
                         service_->RequestDoTask(&ctx_, &request_, &responder_, cq_, cq_,
                                 (void*)q_id);
+								std::cout << "Requested task" << std::endl;
                     } else if (status_ == PROCESS) {
 
                         // The actual processing.
                         // Switch on request enum for actions
-                        std::string prefix("Hello ");
+                        std::cout << "Processing" << std::endl;
                         switch(request_.job()){
                             case (TaskRequest::ALIVE):
                                 {
@@ -94,7 +95,7 @@ class Worker {
                                     break;
                                 }
 
-                            case (TaskRequest::REDUCE): 
+                            case (TaskRequest::REDUCE):
                                 {
                                     std::cout << "REDUCING"<< std::endl;
                                     wrkr->set_status(RUNNING);
@@ -141,7 +142,7 @@ class Worker {
 				TaskRequest request_;
 				// What we send back to the client.
 				TaskReply reply_;
-                int q_id;
+                int *q_id;
                 JobType ret_val;
                 Worker* wrkr;
 
@@ -175,20 +176,21 @@ Worker::Worker(std::string ip_addr_port): task_responder(&task_ctx), wrk_status(
 
     // We only need 2 functions out of these workers. map/reduce and heartbeat
     // since the grpc example code is stateless, we needed to keep track that we are mapping / reducing and still alive
-    mini_workers.emplace_back(&task_service, task_cq.get(),0,this);
-    mini_workers.emplace_back(&task_service, task_cq.get(),1,this);
+	int id = 0;
+    mini_workers.emplace_back(&task_service, task_cq.get(),&id,this);
+    //mini_workers.emplace_back(&task_service, task_cq.get(),1,this);
 
 }
 
 
-/* CS6210_TASK: Here you go. once this function is called your woker's job is to keep looking for new tasks 
+/* CS6210_TASK: Here you go. once this function is called your woker's job is to keep looking for new tasks
 	from Master, complete when given one and again keep looking for the next one.
-	Note that you have the access to BaseMapper's member BaseMapperInternal impl_ and 
-	BaseReduer's member BaseReducerInternal impl_ directly, 
+	Note that you have the access to BaseMapper's member BaseMapperInternal impl_ and
+	BaseReduer's member BaseReducerInternal impl_ directly,
 	so you can manipulate them however you want when running map/reduce tasks*/
 bool Worker::run() {
-	/*  Below 4 lines are just examples of how you will call map and reduce 
-		Remove them once you start writing your own logic */ 
+	/*  Below 4 lines are just examples of how you will call map and reduce
+		Remove them once you start writing your own logic */
 
     void* tag;
     bool ok;
@@ -197,6 +199,8 @@ bool Worker::run() {
         GPR_ASSERT(ok);
         // handle the request, de-ref the tag, as the index to the deque
         wrk_status = RUNNING;
+		std::cout << "Tag: " << tag << std::endl;
+		//int index = static_cast<int>(reinterpret_cast<intptr_t>(tag));
         switch(mini_workers[*((int*)tag)].Proceed()){
             case(ALIVE):
                 {
