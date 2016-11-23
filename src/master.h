@@ -53,6 +53,7 @@ class Master {
 				//the stub to use to connect to the channel
 				//for handling all the grpc stuff
 				std::unique_ptr<AssignTask::Stub> stub_;
+				//keeps track of the amount of heartbeats that
 		};
 		//store the spec
 		MapReduceSpec spec;
@@ -96,6 +97,7 @@ Master::WorkerStatus Master::pingWorkerProcess(const std::string& ip_addr){
 	auto stub = AssignTask::NewStub(grpc::CreateChannel(ip_addr,grpc::InsecureChannelCredentials()));
 	ClientContext context;
 	TaskReply reply;
+	//can use synchronous rpc here, because we're in the constructor
 	Status status = stub->DoTask(&context,request,&reply);
 
 	//the workers aren't going to be doing anything if they're alive, so we only need to check if the
