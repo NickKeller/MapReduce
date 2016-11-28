@@ -1,5 +1,7 @@
 #pragma once
 
+#include <thread>
+#include <chrono>
 #include "mapreduce_spec.h"
 #include "file_shard.h"
 #include <mr_task_factory.h>
@@ -45,15 +47,13 @@ class Master {
 				//the ip address of the worker
 				std::string ip_addr;
 				//the specific shard that it's working on
-				FileShard& shard;
-				//the index in the vector, probably going to use this one more
-				int index;
+				FileShard shard;
+				//the index of the FileShard in the FileShard vector, probably going to use this one more
+				int shard_index;
 				//keeps the state of the worker
 				WorkerStatus state;
-				//the stub to use to connect to the channel
-				//for handling all the grpc stuff
-				std::unique_ptr<AssignTask::Stub> stub_;
-				//keeps track of the amount of heartbeats that
+				//keeps track of the amount of heartbeats that it has been running for
+				int heartbeats;
 		};
 		//store the spec
 		MapReduceSpec spec;
@@ -73,18 +73,57 @@ Master::Master(const MapReduceSpec& mr_spec, const std::vector<FileShard>& file_
 	for(int i = 0; i < mr_spec.worker_ipaddr_ports.size(); i++){
 		std::string wrker = mr_spec.worker_ipaddr_ports.at(i);
 		//have to assign a shard using a constructor like this. It will get reassigned later
-		workers.push_back({wrker, shards.at(0) , i, pingWorkerProcess(wrker), AssignTask::NewStub(grpc::CreateChannel(wrker, grpc::InsecureChannelCredentials()))});
+		workers.push_back({wrker, shards.at(0) , i, pingWorkerProcess(wrker), 0});
 	}
 }
 
 
 /* CS6210_TASK: Here you go. once this function is called you will complete whole map reduce task and return true if succeeded */
 bool Master::run() {
-	//ping all worker processes
-	//assign shards to alive worker processes
-	//possibly set up a ping every X seconds
-	//wait for finish, reassign processes as needed
-
+	bool map_complete = false;
+	int last_shard_assigned = 0;
+	int heartbeat = 200;
+	while(!map_complete){
+		//ping all worker processes
+		for(int i = 0; i < workers.size(); i++){
+			workerInfo worker = workers.at(i);
+			worker.state = pingWorkerProcess(worker.ip_addr);
+			std::string status;
+			switch (worker.state) {
+				case IDLE:
+					status = "IDLE";
+					break;
+				case MAP:
+					status = "MAP";
+					break;
+				case REDUCE:
+					status = "REDUCE";
+					break;
+				case DEAD:
+					status = "DEAD";
+					break;
+				default:
+					status = "UNKNOWN";
+					break;
+			}
+			std::cout << "Worker at " << worker.ip_addr << " is now " << status << std::endl;
+			std::cout << "/* message */" << std::endl;
+		}
+		//assign shards to alive worker processes
+		for(auto worker : workers){
+			if(worker.state == IDLE){
+				//assign the next shard
+				FileShard shard_to_assign = shards.at(last_shard_assigned);
+				worker.shard = shard_to_assign;
+				worker.shard_index = last_shard_assigned;
+				std::cout << "Assigned shard: " << worker.shard.shard_id << " to worker process: " << worker.ip_addr << std::endl;
+				last_shard_assigned++;
+			}
+		}
+		//possibly set up a ping every X seconds
+		//wait for finish, reassign processes as needed
+		std::this_thread::sleep_for(std::chrono::milliseconds(heartbeat));
+	}//end while
 	//spin up reduce processes
 	std::cout << "Master run" << std::endl;
 	return true;

@@ -199,7 +199,7 @@ bool Worker::run() {
         GPR_ASSERT(ok);
         // handle the request, de-ref the tag, as the index to the deque
         wrk_status = RUNNING;
-		std::cout << "Tag: " << tag << std::endl;
+		std::cout << "Tag: " << tag << std::endl << "&tag" << &tag << std::endl;
 		//int index = static_cast<int>(reinterpret_cast<intptr_t>(tag));
         switch(mini_workers[*((int*)tag)].Proceed()){
             case(ALIVE):
