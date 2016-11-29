@@ -13,9 +13,14 @@ using grpc::CompletionQueue;
 using grpc::ClientAsyncResponseReader;
 using grpc::Status;
 using grpc::Channel;
-using masterworker::TaskRequest;
-using masterworker::TaskReply;
+using masterworker::PingRequest;
+using masterworker::PingReply;
+using masterworker::MapRequest;
+using masterworker::MapReply;
+using masterworker::ReduceRequest;
+using masterworker::ReduceReply;
 using masterworker::AssignTask;
+
 
 
 /* CS6210_TASK: Handle all the bookkeeping that Master is supposed to do.
@@ -82,6 +87,7 @@ Master::Master(const MapReduceSpec& mr_spec, const std::vector<FileShard>& file_
 bool Master::run() {
 	bool map_complete = false;
 	int last_shard_assigned = 0;
+	//200ms heartbeat seems fair
 	int heartbeat = 200;
 	while(!map_complete){
 		//ping all worker processes
@@ -131,13 +137,12 @@ bool Master::run() {
 
 Master::WorkerStatus Master::pingWorkerProcess(const std::string& ip_addr){
 	WorkerStatus res = IDLE;
-	TaskRequest request;
-	request.set_job(masterworker::TaskRequest_JobType_ALIVE);
+	PingRequest request;
 	auto stub = AssignTask::NewStub(grpc::CreateChannel(ip_addr,grpc::InsecureChannelCredentials()));
 	ClientContext context;
-	TaskReply reply;
-	//can use synchronous rpc here, because we're in the constructor
-	Status status = stub->DoTask(&context,request,&reply);
+	PingReply reply;
+	//can use synchronous rpc here, since this is just a ping
+	Status status = stub->Ping(&context,request,&reply);
 
 	//the workers aren't going to be doing anything if they're alive, so we only need to check if the
 	//request failed

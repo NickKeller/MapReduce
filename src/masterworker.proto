@@ -3,34 +3,39 @@ syntax = "proto3";
 package masterworker;
 
 service AssignTask {
-    rpc DoTask(TaskRequest) returns (TaskReply){}
+    rpc Ping(PingRequest) returns (PingReply){}
+    rpc Map(MapRequest) returns (MapReply){}
+    rpc Reduce(ReduceRequest) returns (ReduceReply){}
 }
 
-message TaskRequest{
-    enum JobType{
-        MAP = 0;
-        REDUCE = 1;
-        ALIVE = 2;
-    }
+message PingRequest{
+    //more stuff as we need it
+}
+
+message PingReply{
+    //more stuff as we need it
+}
+
+message MapRequest{
     string user_id = 1;
     string job_id = 2;
-    JobType job = 3;
-    string in_fname = 4;
-    
     // this might need to be repeated depending on how many outfiles
-    string out_fname = 5;
+    string out_fname = 3;
     // other stuff as we need it
 }
 
-message TaskReply{
-    enum JobType{
-        MAP = 0;
-        REDUCE = 1;
-        ALIVE = 2;
-    }
+message MapReply{
     string job_name = 1;
-    string location = 2;
-    JobType job = 3;
+    string file_location = 2;
     // other stuff as we need it
 }
 
+message ReduceRequest{
+    string user_id = 1;
+    string in_file = 2;
+}
+
+message ReduceReply{
+    string out_file = 1;
+    //more stuff as we need it
+}
