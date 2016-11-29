@@ -76,7 +76,7 @@ The Rubric is:
 - **2.5 points** - `Reducer`: Reading respective intermediate files, passing the key, value pairs to the BaseReducer's implementation(UserReducer class), writing the output key, value pairs from it to the output files, ensuring that output is sorted on the output keys.
 
 ### Deliverables
-1. Please follow the instructions carefully. **You can handle the whole src folder as it is.** Specficially the folder you hand in must contain the following:
+1. Please follow the instructions carefully. **You can submit the whole src folder as it is.** Specficially the folder you hand in must contain the following:
   - `README` - Optional text file containing anything specific about the project that you want to tell the TAs.
   - `Makefile` - It is already given to you working for the files mentioned below. You might need to change it if you add more source files.
   - `Proto file` - **masterworker.proto** containing the grpc specification between master and worker.

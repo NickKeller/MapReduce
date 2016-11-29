@@ -189,9 +189,14 @@ Worker::Worker(std::string ip_addr_port): task_responder(&task_ctx), wrk_status(
 	BaseReduer's member BaseReducerInternal impl_ directly,
 	so you can manipulate them however you want when running map/reduce tasks*/
 bool Worker::run() {
-	/*  Below 4 lines are just examples of how you will call map and reduce
-		Remove them once you start writing your own logic */
-
+	/*  Below 5 lines are just examples of how you will call map and reduce
+	Remove them once you start writing your own logic */
+	// std::cout << "worker.run(), I 'm not ready yet" <<std::endl;
+	// auto mapper = get_mapper_from_task_factory("cs6210");
+	// mapper->map("I m just a 'dummy', a \"dummy line\"");
+	// auto reducer = get_reducer_from_task_factory("cs6210");
+	// reducer->reduce("dummy", std::vector<std::string>({"1", "1"}));
+	// return true;
     void* tag;
     bool ok;
     while(true) {
