@@ -13,8 +13,12 @@ using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::ServerCompletionQueue;
 using grpc::Status;
-using masterworker::TaskRequest;
-using masterworker::TaskReply;
+using masterworker::MapRequest;
+using masterworker::MapReply;
+using masterworker::ReduceRequest;
+using masterworker::ReduceReply;
+using masterworker::PingRequest;
+using masterworker::PingReply;
 using masterworker::AssignTask;
 
 extern std::shared_ptr<BaseMapper> get_mapper_from_task_factory(const std::string& user_id);
@@ -32,7 +36,7 @@ class Worker {
 		/* DON'T change this function's signature */
 		bool run();
 
-		enum WorkerStatus { IDLE, RUNNING };
+		enum WorkerStatus { IDLE, MAPPING, REDUCING};
         WorkerStatus wrk_status;
 
         WorkerStatus get_status(){
@@ -43,89 +47,102 @@ class Worker {
         }
 	private:
 		/* NOW you can add below, data members and member functions as per the need of your implementation*/
-		enum JobType { ALIVE = 1, MAP = 2, REDUCE = 3};
+		enum JobType { PING = 1, MAP = 2, REDUCE = 3};
 		AssignTask::AsyncService task_service;
 		std::unique_ptr<ServerCompletionQueue> task_cq;
 		ServerContext task_ctx;
-		TaskRequest task_req;
-		TaskReply task_reply;
-		ServerAsyncResponseWriter<TaskReply> task_responder;
 		std::unique_ptr<Server> task_server;
 		class CallData {
 			public:
 				// Take in the "service" instance (in this case representing an asynchronous
 				// server) and the completion queue "cq" used for asynchronous communication
 				// with the gRPC runtime.
-				CallData(AssignTask::AsyncService* service, ServerCompletionQueue* cq, int *q_id_, Worker* wrkr_)
-					: service_(service), cq_(cq), responder_(&ctx_), status_(CREATE), q_id(q_id_),wrkr(wrkr_) {
+				CallData(AssignTask::AsyncService* service, ServerCompletionQueue* cq, JobType job_type_)
+					: service_(service), cq_(cq), ping_responder(&ctx_), map_responder(&ctx_),reduce_responder(&ctx_),
+                    status_(CREATE), job_type(job_type_) {
 						// Invoke the serving logic right away.
-						Proceed();
-					}
+                        Proceed();
+					}//
+                void Proceed(){
+                        switch(job_type){
+                            case(PING):
+                                {
 
-                // Proceed now returns the type of job it did
-                JobType Proceed() {
+                                    PingProceed();
+                                    break;
+                                }
+                            case(MAP):
+                                {
+
+                                    MapProceed();
+                                    break;
+                                }
+                            case(REDUCE):
+                                {
+                                    ReduceProceed();
+                                    break;
+                                }
+                        }//switch
+                }
+                void PingProceed() {
                     if (status_ == CREATE) {
                         // Make this instance progress to the PROCESS state.
                         status_ = PROCESS;
 
-                        service_->RequestDoTask(&ctx_, &request_, &responder_, cq_, cq_,
-                                (void*)q_id);
-								std::cout << "Requested task" << std::endl;
+                        service_->RequestPing(&ctx_, &ping_req, &ping_responder, cq_, cq_,
+                                this);
+                        std::cout << "Ping CallData Created" << std::endl;
                     } else if (status_ == PROCESS) {
+                        std::cout << "Pinging"<< std::endl;
 
-                        // The actual processing.
-                        // Switch on request enum for actions
-                        std::cout << "Processing" << std::endl;
-                        switch(request_.job()){
-                            case (TaskRequest::ALIVE):
-                                {
-                                    //do heartbeat stuff
-                                    auto stat = wrkr->get_status();
-                                    ret_val = ALIVE;
-                                    break;
-                                }
-
-                            case (TaskRequest::MAP):
-                                {
-                                    std::cout << "MAPPING"<< std::endl;
-                                    wrkr->set_status(RUNNING);
-                                    auto mapper = get_mapper_from_task_factory("cs6210");
-                                    mapper->map("some_input_map");
-                                    ret_val = MAP;
-                                    break;
-                                }
-
-                            case (TaskRequest::REDUCE):
-                                {
-                                    std::cout << "REDUCING"<< std::endl;
-                                    wrkr->set_status(RUNNING);
-                                    auto reducer = get_reducer_from_task_factory("cs6210");
-                                    reducer->reduce("some_input_key_reduce", std::vector<std::string>({"some_input_vals_reduce"}));
-                                    ret_val = REDUCE;
-                                    break;
-                                }
-                            default:
-                                {
-                                    //shouldn't happen
-                                    std::cout << "Got unkown job type"<< std::endl;
-                                    break;
-                                }
-                        }//switch
-
-                        //reply_.set_message(prefix + request_.name());
-
-                        // And we are done! Let the gRPC runtime know we've finished, using the
-                        // memory address of this instance as the uniquely identifying tag for
-                        // the event.
                         status_ = FINISH;
-                        responder_.Finish(reply_, Status::OK, (void*)q_id);
+                        ping_responder.Finish(ping_reply, Status::OK, this);
                     } else {
                         GPR_ASSERT(status_ == FINISH);
-                        // Re-Queue this object for further processing
-                        service_->RequestDoTask(&ctx_, &request_, &responder_, cq_, cq_,(void*) q_id);
-                        return ret_val;
+                        delete this;
                     }
-                }//Proceed
+                }//PingProceed
+                void MapProceed() {
+                    if (status_ == CREATE) {
+                        // Make this instance progress to the PROCESS state.
+                        status_ = PROCESS;
+
+                        service_->RequestMap(&ctx_, &map_req, &map_responder, cq_, cq_,
+                                this);
+                        std::cout << "Mapper Call Data Created" << std::endl;
+                    } else if (status_ == PROCESS) {
+                        std::cout << "MAPPING"<< std::endl;
+                        auto mapper = get_mapper_from_task_factory("cs6210");
+                        mapper->map("some_input_map");
+
+                        status_ = FINISH;
+                        map_responder.Finish(map_reply, Status::OK, this);
+                    } else {
+                        GPR_ASSERT(status_ == FINISH);
+                        delete this;
+                    }
+                }//MapProceed
+                void ReduceProceed() {
+                    if (status_ == CREATE) {
+                        // Make this instance progress to the PROCESS state.
+                        status_ = PROCESS;
+
+                        service_->RequestReduce(&ctx_, &reduce_req, &reduce_responder, cq_, cq_,
+                                this);
+                        std::cout << "Reduce CallData Created" << std::endl;
+                    } else if (status_ == PROCESS) {
+                        std::cout << "REDUCING"<< std::endl;
+                        auto reducer = get_reducer_from_task_factory("cs6210");
+                        reducer->reduce("dummy",std::vector<std::string>({"1","1"}));
+
+                        status_ = FINISH;
+                        reduce_responder.Finish(reduce_reply, Status::OK, this);
+                    } else {
+                        GPR_ASSERT(status_ == FINISH);
+                        delete this;
+                    }
+                }//ReduceProceed
+
 
 			private:
 				// The means of communication with the gRPC runtime for an asynchronous
@@ -139,15 +156,19 @@ class Worker {
 				ServerContext ctx_;
 
 				// What we get from the client.
-				TaskRequest request_;
-				// What we send back to the client.
-				TaskReply reply_;
-                int *q_id;
-                JobType ret_val;
-                Worker* wrkr;
+				PingRequest ping_req;
+				PingReply ping_reply;
+				MapRequest map_req;
+				MapReply map_reply;
+				ReduceRequest reduce_req;
+				ReduceReply reduce_reply;
+
+                JobType job_type;
 
 				// The means to get back to the client.
-				ServerAsyncResponseWriter<TaskReply> responder_;
+				ServerAsyncResponseWriter<PingReply> ping_responder;
+				ServerAsyncResponseWriter<MapReply> map_responder;
+				ServerAsyncResponseWriter<ReduceReply> reduce_responder;
 
 				// Let's implement a tiny state machine with the following states.
 				enum CallStatus { CREATE, PROCESS, FINISH };
@@ -166,7 +187,7 @@ Worker::~Worker(){
 
 /* CS6210_TASK: ip_addr_port is the only information you get when started.
 	You can populate your other class data members here if you want */
-Worker::Worker(std::string ip_addr_port): task_responder(&task_ctx), wrk_status(IDLE) {
+Worker::Worker(std::string ip_addr_port): wrk_status(IDLE) {
     ServerBuilder builder;
     builder.AddListeningPort(ip_addr_port, grpc::InsecureServerCredentials());
     builder.RegisterService(&task_service);
@@ -176,8 +197,8 @@ Worker::Worker(std::string ip_addr_port): task_responder(&task_ctx), wrk_status(
 
     // We only need 2 functions out of these workers. map/reduce and heartbeat
     // since the grpc example code is stateless, we needed to keep track that we are mapping / reducing and still alive
-	int id = 0;
-    mini_workers.emplace_back(&task_service, task_cq.get(),&id,this);
+
+    //mini_workers.emplace_back(&task_service, task_cq.get(),&id,this);
     //mini_workers.emplace_back(&task_service, task_cq.get(),1,this);
 
 }
@@ -199,27 +220,15 @@ bool Worker::run() {
 	// return true;
     void* tag;
     bool ok;
+    new CallData(&task_service, task_cq.get(),PING);
+    new CallData(&task_service, task_cq.get(),MAP);
+    new CallData(&task_service, task_cq.get(),REDUCE);
     while(true) {
         GPR_ASSERT(task_cq->Next(&tag,&ok));
         GPR_ASSERT(ok);
         // handle the request, de-ref the tag, as the index to the deque
-        wrk_status = RUNNING;
-		std::cout << "Tag: " << tag << std::endl << "&tag" << &tag << std::endl;
-		//int index = static_cast<int>(reinterpret_cast<intptr_t>(tag));
-        switch(mini_workers[*((int*)tag)].Proceed()){
-            case(ALIVE):
-                {
-                    // we just did a heartbeat check
-                    continue;
-                    break;
-                }
-            case(REDUCE):
-            case(MAP):
-                {
-                    // we just finished a map/reduce, set status to idle then return
-                    wrk_status = IDLE;
-                    return true;
-                }
-        }//switch
+        std::cout << "Tag: " << tag << std::endl << "&tag" << &tag << std::endl;
+        static_cast<CallData*>(tag)->Proceed();		
+        //int index = static_cast<int>(reinterpret_cast<intptr_t>(tag));
     }
 }
