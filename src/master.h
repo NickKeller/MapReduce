@@ -19,6 +19,7 @@ using masterworker::MapRequest;
 using masterworker::MapReply;
 using masterworker::ReduceRequest;
 using masterworker::ReduceReply;
+using masterworker::ShardPiece;
 using masterworker::AssignTask;
 
 
@@ -44,7 +45,7 @@ class Master {
 		IDLE - Currenty waiting for a job
 		DEAD - Worker is down
 		*/
-		enum WorkerStatus {MAP, REDUCE, IDLE, DEAD};
+		enum WorkerStatus {MAP, REDUCE, IDLE, DEAD, ALIVE};
 
 		//some kind of map of shards to worker processes
 		struct workerInfo{
@@ -67,6 +68,7 @@ class Master {
 
 		//private functions
 		WorkerStatus pingWorkerProcess(const std::string& ip_addr);
+		void assignMapTask(workerInfo* worker);
 
 };
 
@@ -78,7 +80,8 @@ Master::Master(const MapReduceSpec& mr_spec, const std::vector<FileShard>& file_
 	for(int i = 0; i < mr_spec.worker_ipaddr_ports.size(); i++){
 		std::string wrker = mr_spec.worker_ipaddr_ports.at(i);
 		//have to assign a shard using a constructor like this. It will get reassigned later
-		workers.push_back({wrker, shards.at(0) , i, pingWorkerProcess(wrker), 0});
+		workers.push_back({wrker, shards.at(0) , i, IDLE, 0});
+		std::cout << "Worker with ipAddr " << wrker << " added" << std::endl;
 	}
 }
 
@@ -91,39 +94,40 @@ bool Master::run() {
 	int heartbeat = 200;
 	while(!map_complete){
 		//ping all worker processes
+		//this can be done synchronously
 		for(int i = 0; i < workers.size(); i++){
-			workerInfo worker = workers.at(i);
-			worker.state = pingWorkerProcess(worker.ip_addr);
-			std::string status;
-			switch (worker.state) {
-				case IDLE:
-					status = "IDLE";
-					break;
-				case MAP:
-					status = "MAP";
-					break;
-				case REDUCE:
-					status = "REDUCE";
-					break;
-				case DEAD:
-					status = "DEAD";
-					break;
-				default:
-					status = "UNKNOWN";
-					break;
+			//need to grab the address, otherwise we're not modifying the
+			//actual workerInfo struct. Yay C++ semantics
+			workerInfo* worker = &(workers.at(i));
+			WorkerStatus state = pingWorkerProcess(worker->ip_addr);
+			//state is either going to be ALIVE or DEAD
+			if(state == ALIVE){
+				worker->heartbeats++;
+				std::cout << "Worker at " << worker->ip_addr << " is ALIVE for " << worker->heartbeats << " heartbeats" << std::endl;
 			}
-			std::cout << "Worker at " << worker.ip_addr << " is now " << status << std::endl;
-			std::cout << "/* message */" << std::endl;
+			else{
+				std::cout << "Worker at " << worker->ip_addr << " is DEAD" << std::endl;
+				worker->state = DEAD;
+			}
+
 		}
-		//assign shards to alive worker processes
-		for(auto worker : workers){
-			if(worker.state == IDLE){
+		//assign shards to alive worker processes, only if there are shards
+		//left to assign
+		for(int i = 0; i < workers.size(); i++){
+			workerInfo* worker = &(workers.at(i));
+			if(worker->state == IDLE && last_shard_assigned < shards.size()){
 				//assign the next shard
 				FileShard shard_to_assign = shards.at(last_shard_assigned);
-				worker.shard = shard_to_assign;
-				worker.shard_index = last_shard_assigned;
-				std::cout << "Assigned shard: " << worker.shard.shard_id << " to worker process: " << worker.ip_addr << std::endl;
+				worker->shard = shard_to_assign;
+				worker->shard_index = last_shard_assigned;
+				worker->state = MAP;
+				std::cout << "Assigned shard: " << worker->shard.shard_id << " to worker process: " << worker->ip_addr << std::endl;
 				last_shard_assigned++;
+				//fire off a map task, sync for now
+				assignMapTask(worker);
+			}
+			else if(last_shard_assigned >= shards.size()){
+				std::cout << "All shards assigned" << std::endl;
 			}
 		}
 		//possibly set up a ping every X seconds
@@ -136,11 +140,12 @@ bool Master::run() {
 }
 
 Master::WorkerStatus Master::pingWorkerProcess(const std::string& ip_addr){
-	WorkerStatus res = IDLE;
+	WorkerStatus res = ALIVE;
 	PingRequest request;
 	auto stub = AssignTask::NewStub(grpc::CreateChannel(ip_addr,grpc::InsecureChannelCredentials()));
 	ClientContext context;
 	PingReply reply;
+	std::cout << "Pinging worker at " << ip_addr << std::endl;
 	//can use synchronous rpc here, since this is just a ping
 	Status status = stub->Ping(&context,request,&reply);
 
@@ -152,4 +157,31 @@ Master::WorkerStatus Master::pingWorkerProcess(const std::string& ip_addr){
 	}
 
 	return res;
+}
+
+void Master::assignMapTask(workerInfo* worker){
+	MapRequest request;
+	auto stub = AssignTask::NewStub(grpc::CreateChannel(worker->ip_addr, grpc::InsecureChannelCredentials()));
+	ClientContext context;
+	MapReply reply;
+	request.set_user_id("cs6210");
+	//special thing to do for shards
+	FileShard shard = worker->shard;
+	for (int i = 0; i < shard.pieces.size(); i++) {
+		file_key_offset* pair = shard.pieces.at(i);
+		ShardPiece* piece = request.add_shard();
+		piece->set_file_name(pair->filename);
+		piece->set_start_index(pair->startOffset);
+		piece->set_end_index(pair->endOffset);
+	}
+	request.set_out_fname("testoutfname");
+	std::cout << "Assigning map task to " << worker->ip_addr << std::endl;
+	Status status = stub->Map(&context,request,&reply);
+
+	if(status.ok()){
+		std::cout << "Successful map!" << std::endl;
+	}
+	else{
+		std::cout << "Error in map!" << std::endl;
+	}
 }

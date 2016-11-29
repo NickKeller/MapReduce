@@ -66,22 +66,14 @@ class Worker {
                 void Proceed(){
                         switch(job_type){
                             case(PING):
-                                {
-
                                     PingProceed();
                                     break;
-                                }
                             case(MAP):
-                                {
-
                                     MapProceed();
                                     break;
-                                }
                             case(REDUCE):
-                                {
                                     ReduceProceed();
                                     break;
-                                }
                         }//switch
                 }
                 void PingProceed() {
@@ -93,6 +85,8 @@ class Worker {
                                 this);
                         std::cout << "Ping CallData Created" << std::endl;
                     } else if (status_ == PROCESS) {
+						//spawn a new ping calldata to handle new requests
+						new CallData(service_,cq_,PING);
                         std::cout << "Pinging"<< std::endl;
 
                         status_ = FINISH;
@@ -111,10 +105,13 @@ class Worker {
                                 this);
                         std::cout << "Mapper Call Data Created" << std::endl;
                     } else if (status_ == PROCESS) {
+						//spawn a new map CallData to handle new maps
+						new CallData(service_,cq_,MAP);
                         std::cout << "MAPPING"<< std::endl;
                         auto mapper = get_mapper_from_task_factory("cs6210");
-                        mapper->map("some_input_map");
-
+                        //mapper->map("some_input_map");
+						//print out the details of the map, then quit
+						
                         status_ = FINISH;
                         map_responder.Finish(map_reply, Status::OK, this);
                     } else {
@@ -131,9 +128,11 @@ class Worker {
                                 this);
                         std::cout << "Reduce CallData Created" << std::endl;
                     } else if (status_ == PROCESS) {
+						//spawn a new map CallData to handle new maps
+						new CallData(service_,cq_,REDUCE);
                         std::cout << "REDUCING"<< std::endl;
                         auto reducer = get_reducer_from_task_factory("cs6210");
-                        reducer->reduce("dummy",std::vector<std::string>({"1","1"}));
+                        //reducer->reduce("dummy",std::vector<std::string>({"1","1"}));
 
                         status_ = FINISH;
                         reduce_responder.Finish(reduce_reply, Status::OK, this);
@@ -220,6 +219,8 @@ bool Worker::run() {
 	// return true;
     void* tag;
     bool ok;
+
+	//these are the three listeners that we will use for the ping, map, and reduce tasks
     new CallData(&task_service, task_cq.get(),PING);
     new CallData(&task_service, task_cq.get(),MAP);
     new CallData(&task_service, task_cq.get(),REDUCE);
@@ -227,8 +228,7 @@ bool Worker::run() {
         GPR_ASSERT(task_cq->Next(&tag,&ok));
         GPR_ASSERT(ok);
         // handle the request, de-ref the tag, as the index to the deque
-        std::cout << "Tag: " << tag << std::endl << "&tag" << &tag << std::endl;
-        static_cast<CallData*>(tag)->Proceed();		
+        static_cast<CallData*>(tag)->Proceed();
         //int index = static_cast<int>(reinterpret_cast<intptr_t>(tag));
     }
 }
