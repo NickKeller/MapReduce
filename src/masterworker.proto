@@ -15,8 +15,7 @@ message PingRequest{
 message MapRequest{
     string user_id = 1;
     string job_id = 2;
-    string out_fname = 3;
-    repeated ShardPiece shard = 4;
+    repeated ShardPiece shard = 3;
     // other stuff as we need it
 }
 
@@ -35,11 +34,11 @@ message TaskReply{
     // other stuff as we need it
 
     //the type of task that is returned
-    string taskType = 3;
+    string task_type = 3;
 }
 
 message ReduceRequest{
     string user_id = 1;
-    string in_file = 2;
+    string output_file = 2;
     string job_id = 3;
 }

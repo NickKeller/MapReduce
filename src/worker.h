@@ -106,13 +106,13 @@ class Worker {
                     } else if (status_ == PROCESS) {
 						//spawn a new map CallData to handle new maps
 						new CallData(service_,cq_,MAP);
+						task_reply.set_task_type("MAP");
                         std::cout << "MAPPING"<< std::endl;
                         auto mapper = get_mapper_from_task_factory("cs6210");
                         //mapper->map("some_input_map");
 						//print out the details of the map, then quit
 						std::cout << "Map details:" << std::endl;
 						std::cout << "Job ID: " << map_req.job_id() << std::endl;
-						std::cout << "Out Fname: " << map_req.out_fname() << std::endl;
 						std::cout << "Shard: " << std::endl;
 						auto shard = map_req.shard();
 						for (size_t i = 0; i < shard.size(); i++) {
@@ -142,6 +142,10 @@ class Worker {
                         std::cout << "REDUCING"<< std::endl;
                         auto reducer = get_reducer_from_task_factory("cs6210");
                         //reducer->reduce("dummy",std::vector<std::string>({"1","1"}));
+						//print out all of the details
+						std::cout << "Reduce Details:" << std::endl;
+						std::cout << "Job ID: " << reduce_req.job_id() << std::endl;
+						std::cout << "Output file: " << reduce_req.output_file() << std::endl;
 
                         status_ = FINISH;
                         reduce_responder.Finish(task_reply, Status::OK, this);
