@@ -96,6 +96,7 @@ inline bool shard_files(const MapReduceSpec& mr_spec, std::vector<FileShard>& fi
 		totalsize += size;
 		std::cout << "File: " << filename << " Size: " << size << "B" << std::endl;
 	}
+	shard->shard_id = shard_id;
 	fileShards.push_back(*shard);
 
 	//got the total size, now to figure out the number of shards

@@ -13,12 +13,11 @@ using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::ServerCompletionQueue;
 using grpc::Status;
-using masterworker::MapRequest;
-using masterworker::MapReply;
-using masterworker::ReduceRequest;
-using masterworker::ReduceReply;
 using masterworker::PingRequest;
-using masterworker::PingReply;
+using masterworker::MapRequest;
+using masterworker::ReduceRequest;
+using masterworker::TaskReply;
+using masterworker::ShardPiece;
 using masterworker::AssignTask;
 
 extern std::shared_ptr<BaseMapper> get_mapper_from_task_factory(const std::string& user_id);
@@ -90,7 +89,7 @@ class Worker {
                         std::cout << "Pinging"<< std::endl;
 
                         status_ = FINISH;
-                        ping_responder.Finish(ping_reply, Status::OK, this);
+                        ping_responder.Finish(task_reply, Status::OK, this);
                     } else {
                         GPR_ASSERT(status_ == FINISH);
                         delete this;
@@ -111,9 +110,19 @@ class Worker {
                         auto mapper = get_mapper_from_task_factory("cs6210");
                         //mapper->map("some_input_map");
 						//print out the details of the map, then quit
-						
+						std::cout << "Map details:" << std::endl;
+						std::cout << "Job ID: " << map_req.job_id() << std::endl;
+						std::cout << "Out Fname: " << map_req.out_fname() << std::endl;
+						std::cout << "Shard: " << std::endl;
+						auto shard = map_req.shard();
+						for (size_t i = 0; i < shard.size(); i++) {
+							auto shardpiece = shard.Get(i);
+							std::cout << "\tFile Name: " << shardpiece.file_name() << std::endl;
+							std::cout << "\tStart Index: " << shardpiece.start_index() << std::endl;
+							std::cout << "\tEnd Index: " << shardpiece.end_index() << std::endl;
+						}
                         status_ = FINISH;
-                        map_responder.Finish(map_reply, Status::OK, this);
+                        map_responder.Finish(task_reply, Status::OK, this);
                     } else {
                         GPR_ASSERT(status_ == FINISH);
                         delete this;
@@ -135,7 +144,7 @@ class Worker {
                         //reducer->reduce("dummy",std::vector<std::string>({"1","1"}));
 
                         status_ = FINISH;
-                        reduce_responder.Finish(reduce_reply, Status::OK, this);
+                        reduce_responder.Finish(task_reply, Status::OK, this);
                     } else {
                         GPR_ASSERT(status_ == FINISH);
                         delete this;
@@ -156,18 +165,16 @@ class Worker {
 
 				// What we get from the client.
 				PingRequest ping_req;
-				PingReply ping_reply;
 				MapRequest map_req;
-				MapReply map_reply;
 				ReduceRequest reduce_req;
-				ReduceReply reduce_reply;
+				TaskReply task_reply;
 
                 JobType job_type;
 
 				// The means to get back to the client.
-				ServerAsyncResponseWriter<PingReply> ping_responder;
-				ServerAsyncResponseWriter<MapReply> map_responder;
-				ServerAsyncResponseWriter<ReduceReply> reduce_responder;
+				ServerAsyncResponseWriter<TaskReply> ping_responder;
+				ServerAsyncResponseWriter<TaskReply> map_responder;
+				ServerAsyncResponseWriter<TaskReply> reduce_responder;
 
 				// Let's implement a tiny state machine with the following states.
 				enum CallStatus { CREATE, PROCESS, FINISH };

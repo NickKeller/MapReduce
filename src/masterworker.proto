@@ -3,25 +3,20 @@ syntax = "proto3";
 package masterworker;
 
 service AssignTask {
-    rpc Ping(PingRequest) returns (PingReply){}
-    rpc Map(MapRequest) returns (MapReply){}
-    rpc Reduce(ReduceRequest) returns (ReduceReply){}
+    rpc Ping(PingRequest) returns (TaskReply){}
+    rpc Map(MapRequest) returns (TaskReply){}
+    rpc Reduce(ReduceRequest) returns (TaskReply){}
 }
 
 message PingRequest{
     //more stuff as we need it
 }
 
-message PingReply{
-    //more stuff as we need it
-}
-
 message MapRequest{
     string user_id = 1;
     string job_id = 2;
-    repeated ShardPiece shard = 3;
-    // this might need to be repeated depending on how many outfiles
-    string out_fname = 4;
+    string out_fname = 3;
+    repeated ShardPiece shard = 4;
     // other stuff as we need it
 }
 
@@ -31,18 +26,20 @@ message ShardPiece{
     int32 end_index = 3;
 }
 
-message MapReply{
-    string job_name = 1;
-    string file_location = 2;
+message TaskReply{
+    //the job id of the task, set only for map and reduce
+    string job_id = 1;
+    //the file that was written to
+    string out_file = 2;
+
     // other stuff as we need it
+
+    //the type of task that is returned
+    string taskType = 3;
 }
 
 message ReduceRequest{
     string user_id = 1;
     string in_file = 2;
-}
-
-message ReduceReply{
-    string out_file = 1;
-    //more stuff as we need it
+    string job_id = 3;
 }
