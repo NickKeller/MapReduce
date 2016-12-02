@@ -35,8 +35,6 @@ public:
 	std::string ip_addr;
 	//the specific shard that it's working on
 	FileShard shard;
-	//the index of the FileShard in the FileShard vector, probably going to use this one more
-	int shard_index;
 	//keeps the state of the worker
 	WorkerStatus state;
 	//keeps track of the amount of heartbeats that it has been running for
@@ -81,6 +79,8 @@ class Master {
 		std::vector<FileShard> shards;
 		std::vector<workerInfo*> workers;
 		std::vector<std::string> output_files;
+		//keeps track of the jobs that have been completed
+		std::vector<std::string> jobs;
 		//the CompletionQueue used for map and reduce events
 		CompletionQueue master_cq;
 
@@ -88,7 +88,8 @@ class Master {
 		WorkerStatus pingWorkerProcess(const workerInfo* worker);
 		void assignMapTask(workerInfo* worker);
 		void assignReduceTask(workerInfo* worker);
-		//TaskReply getSingleResponse(void);
+		bool allWorkersDead(void);
+		bool newJob(const std::string& job_id);
 
 
 };
@@ -99,6 +100,7 @@ Master::Master(const MapReduceSpec& mr_spec, const std::vector<FileShard>& file_
 	//populate the workers vector
 	for(int i = 0; i < mr_spec.worker_ipaddr_ports.size(); i++){
 		std::string wrker = mr_spec.worker_ipaddr_ports.at(i);
+		std::cout << "Worker: " << wrker << std::endl;
 		//have to assign a shard using a constructor like this. It will get reassigned later
 		workerInfo* worker = new workerInfo;
 		worker->ip_addr = wrker;
@@ -113,7 +115,6 @@ Master::Master(const MapReduceSpec& mr_spec, const std::vector<FileShard>& file_
 		std::string fileName = spec.output_dir + "/output_" + std::to_string(i);
 		output_files.push_back(fileName);
 	}
-
 }
 
 
@@ -124,41 +125,54 @@ bool Master::run() {
 	//200ms heartbeat seems fair
 	int heartbeat = 200;
 	int num_shards_mapped = 0;
+	int num_map_tasks_to_do = shards.size();
 	while(!map_complete){
 		//ping all worker processes
 		//this can be done synchronously
 		for(int i = 0; i < workers.size(); i++){
-			//need to grab the address, otherwise we're not modifying the
-			//actual workerInfo struct. Yay C++ semantics
 			workerInfo* worker = workers.at(i);
 			WorkerStatus state = pingWorkerProcess(worker);
 			//state is either going to be ALIVE or DEAD
 			if(state == ALIVE){
 				worker->heartbeats++;
 				std::cout << "Worker at " << worker->ip_addr << " is ALIVE for " << worker->heartbeats << " heartbeats" << std::endl;
+				//reassign shard if the worker has been working for more than 1 minute
+				if(worker->heartbeats > (300)){
+					FileShard stalled_shard = worker->shard;
+					shards.push_back(stalled_shard);
+				}
 			}
 			else{
 				std::cout << "Worker at " << worker->ip_addr << " is DEAD" << std::endl;
+				//pop it's task, if the process was doing something
+				if(worker->state == MAP){
+					//it was busy doing something
+					FileShard dead_shard = worker->shard;
+					shards.push_back(dead_shard);
+				}
 				worker->state = DEAD;
 			}
-
 		}
-		//assign shards to alive worker processes, only if there are shards
-		//left to assign
+
+		if(allWorkersDead()){
+			std::cout << "ERROR: ALL WORKER PROCESSES ARE DEAD" << std::endl;
+			return false;
+		}
+
+		//assign shards to alive worker processes, only if there are shards left to assign
 		for(int i = 0; i < workers.size(); i++){
 			workerInfo* worker = workers.at(i);
-			if(worker->state == IDLE && last_shard_assigned < shards.size()){
+			if(worker->state == IDLE && shards.size() > 0){
 				//assign the next shard
-				FileShard shard_to_assign = shards.at(last_shard_assigned);
+				FileShard shard_to_assign = shards.back();
+				shards.pop_back();
 				worker->shard = shard_to_assign;
-				worker->shard_index = last_shard_assigned;
 				worker->state = MAP;
 				std::cout << "Assigned shard: " << worker->shard.shard_id << " to worker process: " << worker->ip_addr << std::endl;
-				last_shard_assigned++;
 				//fire off a map task
 				assignMapTask(worker);
 			}
-			else if(last_shard_assigned >= shards.size()){
+			else if(shards.size() == 0){
 				std::cout << "All shards assigned" << std::endl;
 			}
 		}
@@ -181,7 +195,11 @@ bool Master::run() {
 			std::cout << "Successful map for " << worker->ip_addr << std::endl;
 			worker->state = IDLE;
 			worker->heartbeats = 0;
-			num_shards_mapped++;
+			//increment the number of shards mapped only if this was a job that hasn't already been completed
+			TaskReply reply = call->reply;
+			if(newJob(reply.job_id())){
+				num_shards_mapped++;
+			}
 		}
 		else{
 			std::cout << "---------------ERROR IN MAP FOR " << worker->ip_addr << std::endl;
@@ -190,7 +208,7 @@ bool Master::run() {
 		}
 
 		//if all shards have been mapped, set the bool to complete
-		if(num_shards_mapped == shards.size()){
+		if(num_shards_mapped == num_map_tasks_to_do){
 			map_complete = true;
 		}
 		//wait for finish, reassign processes as needed
@@ -203,6 +221,7 @@ bool Master::run() {
 	//fire up as many reduce tasks as nr_output_files
 	int num_reduces_done = 0;
 	int last_reduce_assigned = 0;
+	int num_reduce_tasks_to_do = output_files.size();
 	while(!reduce_complete){
 		//ping all worker processes
 		//this can be done synchronously
@@ -218,26 +237,36 @@ bool Master::run() {
 			}
 			else{
 				std::cout << "Worker at " << worker->ip_addr << " is DEAD" << std::endl;
+				//was this running a reduce task? If so, reassign the output file it was working on
+				if(worker->state = REDUCE){
+					std::string dead_file = worker->output_file;
+					output_files.push_back(dead_file);
+				}
 				worker->state = DEAD;
 			}
 
+		}
+
+		if(allWorkersDead()){
+			std::cout << "ERROR: ALL WORKER PROCESSES ARE DEAD" << std::endl;
+			return false;
 		}
 		//assign shards to alive worker processes, only if there are shards
 		//left to assign
 		for(int i = 0; i < workers.size(); i++){
 			workerInfo* worker = workers.at(i);
-			if(worker->state == IDLE && last_reduce_assigned < output_files.size()){
+			if(worker->state == IDLE && output_files.size() > 0){
 				//assign the next reduce task
-				std::string output_file_to_assign = output_files.at(last_reduce_assigned);
+				std::string output_file_to_assign = output_files.back();
+				output_files.pop_back();
 				worker->output_file = output_file_to_assign;
-				worker->shard_index = last_reduce_assigned;//can use shard_index as a double for this
 				worker->state = REDUCE;
-				std::cout << "Assigned reduce: " << worker->shard_index << " to worker process: " << worker->ip_addr << std::endl;
+				std::cout << "Assigned reduce: " << worker->output_file << " to worker process: " << worker->ip_addr << std::endl;
 				last_reduce_assigned++;
 				//fire off a map task
 				assignReduceTask(worker);
 			}
-			else if(last_reduce_assigned >= output_files.size()){
+			else if(output_files.size() == 0){
 				std::cout << "All reduce tasks assigned" << std::endl;
 			}
 		}
@@ -268,7 +297,7 @@ bool Master::run() {
 		}
 
 		//if all shards have been mapped, set the bool to complete
-		if(num_reduces_done == output_files.size()){
+		if(num_reduces_done == num_reduce_tasks_to_do){
 			reduce_complete = true;
 		}
 		//wait for finish, reassign processes as needed
@@ -313,7 +342,7 @@ void Master::assignMapTask(workerInfo* worker){
 		piece->set_start_index(pair->startOffset);
 		piece->set_end_index(pair->endOffset);
 	}
-	std::string jobID = worker->ip_addr + "_map_" + std::to_string(worker->shard_index);
+	std::string jobID = "map_" + std::to_string(worker->shard.shard_id);
 	request.set_job_id(jobID);
 	worker->job_id = jobID;
 	std::cout << "Assigning map task to " << worker->ip_addr << std::endl;
@@ -337,9 +366,8 @@ void Master::assignReduceTask(workerInfo* worker){
 	ClientContext context;
 	request.set_user_id("cs6210");
 	request.set_output_file(worker->output_file);
-	std::string jobID = worker->ip_addr + "_reduce_" + std::to_string(worker->shard_index);
-	request.set_job_id(jobID);
-	worker->job_id = jobID;
+	request.set_job_id(worker->output_file);
+	worker->job_id = worker->output_file;
 	std::cout << "Assigning map task to " << worker->ip_addr << std::endl;
 	//sync
 	//Status status;
@@ -353,4 +381,18 @@ void Master::assignReduceTask(workerInfo* worker){
 	call->response_reader->Finish(&call->reply, &call->rpc_status,(void*)call);
 
 	std::cout << "Returning from assignReduceTask" << std::endl;
+}
+
+bool Master::allWorkersDead(){
+	for (size_t i = 0; i < workers.size(); i++) {
+		workerInfo* worker = workers.at(i);
+		if(worker->state != DEAD){
+			return false;
+		}
+	}
+	return true;
+}
+
+bool Master::newJob(const std::string& job_id){
+	return true;
 }
