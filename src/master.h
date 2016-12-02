@@ -42,7 +42,6 @@ public:
 	//keeps track of the job id that this worker is working on
 	std::string job_id;
 	//the name of the output file that this is supposed to write to
-	//used only for reduce tasks
 	std::string output_file;
 };
 
@@ -81,8 +80,14 @@ class Master {
 		std::vector<std::string> output_files;
 		//keeps track of the jobs that have been completed
 		std::vector<std::string> jobs;
+		//the list of files that map processes output
+		std::vector<std::string> map_output_files;
+		//the list of files that reduce processes output
+		std::vector<std::string> reduce_output_files;
 		//the CompletionQueue used for map and reduce events
 		CompletionQueue master_cq;
+		//the max number of heartbeats to wait until reassigning a task
+		int heartbeat_limit;
 
 		//private functions
 		WorkerStatus pingWorkerProcess(const workerInfo* worker);
@@ -90,6 +95,7 @@ class Master {
 		void assignReduceTask(workerInfo* worker);
 		bool allWorkersDead(void);
 		bool newJob(const std::string& job_id);
+		TaskReply getSingleResponse(const std::string& task_type);
 
 
 };
@@ -107,9 +113,10 @@ Master::Master(const MapReduceSpec& mr_spec, const std::vector<FileShard>& file_
 		worker->state = IDLE;
 		worker->heartbeats = 0;
 		workers.push_back(worker);
-		// workers.push_back({wrker, shards.at(0) , i, IDLE, 0, ""});
 		std::cout << "Worker with ipAddr " << worker->ip_addr << " added" << std::endl;
 	}
+	heartbeat_limit = 5*30;
+
 	//populate the output files vector
 	for (size_t i = 0; i < spec.num_output_files; i++) {
 		std::string fileName = spec.output_dir + "/output_" + std::to_string(i);
@@ -137,8 +144,9 @@ bool Master::run() {
 				worker->heartbeats++;
 				std::cout << "Worker at " << worker->ip_addr << " is ALIVE for " << worker->heartbeats << " heartbeats" << std::endl;
 				//reassign shard if the worker has been working for more than 1 minute
-				if(worker->heartbeats > (300)){
+				if(worker->heartbeats > (heartbeat_limit)){
 					FileShard stalled_shard = worker->shard;
+					std::cout << "-------------------------Setting shard " << stalled_shard.shard_id << " to be redone" << std::endl;
 					shards.push_back(stalled_shard);
 				}
 			}
@@ -178,34 +186,18 @@ bool Master::run() {
 		}
 
 		//block on a single response
-		//TaskReply reply = getSingleResponse();
-		void* got_tag;
-		bool ok = false;
-		std::cout << "Calling next" << std::endl;
-		master_cq.Next(&got_tag, &ok);
-		//now, find the correct worker to use
-		std::cout << "Getting worker" << std::endl;
-		AsyncWorkerCall* call = static_cast<AsyncWorkerCall*>(got_tag);
-		workerInfo* worker = call->cur_worker;
-		//w = findWorker((int*)got_tag);
-		std::cout << "Found worker: " << worker->ip_addr << std::endl;
-		GPR_ASSERT(ok);
-
-		if(call->rpc_status.ok()){
-			std::cout << "Successful map for " << worker->ip_addr << std::endl;
-			worker->state = IDLE;
-			worker->heartbeats = 0;
-			//increment the number of shards mapped only if this was a job that hasn't already been completed
-			TaskReply reply = call->reply;
+		TaskReply reply = getSingleResponse("MAP");
+		//make sure Successful
+		if(reply.task_type().compare("MAP") == 0){
+			//Successful
 			if(newJob(reply.job_id())){
+				//add to the list of output files
+				std::cout << "New Job, adding jod id: " << reply.job_id() << " to list of completed jobs" << std::endl;
+				map_output_files.push_back(reply.out_file());
 				num_shards_mapped++;
 			}
 		}
-		else{
-			std::cout << "---------------ERROR IN MAP FOR " << worker->ip_addr << std::endl;
-			std::cout << call->rpc_status.error_code() << std::endl;
-			std::cout << call->rpc_status.error_message() << std::endl;
-		}
+
 
 		//if all shards have been mapped, set the bool to complete
 		if(num_shards_mapped == num_map_tasks_to_do){
@@ -215,6 +207,8 @@ bool Master::run() {
 		std::this_thread::sleep_for(std::chrono::milliseconds(heartbeat));
 	}//end while
 
+	//clear the job ids and the output files
+	jobs.clear();
 
 	//spin up reduce processes
 	bool reduce_complete = false;
@@ -272,28 +266,16 @@ bool Master::run() {
 		}
 
 		//block on a single response
-		void* got_tag;
-		bool ok = false;
-		std::cout << "Calling next" << std::endl;
-		master_cq.Next(&got_tag, &ok);
-		//now, find the correct worker to use
-		std::cout << "Getting worker" << std::endl;
-		AsyncWorkerCall* call = static_cast<AsyncWorkerCall*>(got_tag);
-		workerInfo* worker = call->cur_worker;
-		//w = findWorker((int*)got_tag);
-		std::cout << "Found worker: " << worker->ip_addr << std::endl;
-		GPR_ASSERT(ok);
-
-		if(call->rpc_status.ok()){
-			std::cout << "Successful reduce for " << worker->ip_addr << std::endl;
-			worker->state = IDLE;
-			worker->heartbeats = 0;
-			num_reduces_done++;
-		}
-		else{
-			std::cout << "---------------ERROR IN REDUCE FOR " << worker->ip_addr << std::endl;
-			std::cout << call->rpc_status.error_code() << std::endl;
-			std::cout << call->rpc_status.error_message() << std::endl;
+		TaskReply reply = getSingleResponse("REDUCE");
+		//make sure Successful
+		if(reply.task_type().compare("REDUCE") == 0){
+			//Successful
+			if(newJob(reply.job_id())){
+				//add to the list of output files
+				std::cout << "New Job, adding jod id: " << reply.job_id() << " to list of completed jobs" << std::endl;
+				reduce_output_files.push_back(reply.out_file());
+				num_reduces_done++;
+			}
 		}
 
 		//if all shards have been mapped, set the bool to complete
@@ -302,6 +284,11 @@ bool Master::run() {
 		}
 		//wait for finish, reassign processes as needed
 		std::this_thread::sleep_for(std::chrono::milliseconds(heartbeat));
+	}
+	//time to output the final files
+	std::cout << "Output files:" << std::endl;
+	for(auto file : reduce_output_files){
+		std::cout << "\t-" << file << std::endl;
 	}
 	std::cout << "Master run" << std::endl;
 	return true;
@@ -367,8 +354,11 @@ void Master::assignReduceTask(workerInfo* worker){
 	request.set_user_id("cs6210");
 	request.set_output_file(worker->output_file);
 	request.set_job_id(worker->output_file);
+	for(auto input_file : map_output_files){
+		request.add_input_files(input_file);
+	}
 	worker->job_id = worker->output_file;
-	std::cout << "Assigning map task to " << worker->ip_addr << std::endl;
+	std::cout << "Assigning reduce task to " << worker->ip_addr << std::endl;
 	//sync
 	//Status status;
 	// status = stub->Reduce(&context,request,&(worker->reply));
@@ -384,6 +374,7 @@ void Master::assignReduceTask(workerInfo* worker){
 }
 
 bool Master::allWorkersDead(){
+	return false;
 	for (size_t i = 0; i < workers.size(); i++) {
 		workerInfo* worker = workers.at(i);
 		if(worker->state != DEAD){
@@ -394,5 +385,45 @@ bool Master::allWorkersDead(){
 }
 
 bool Master::newJob(const std::string& job_id){
+	for(auto job : jobs){
+		if(job.compare(job_id) == 0){
+			//not a new job
+			return false;
+		}
+	}
+	//this is a new job, add it to the list of completed jobs, then return true
+	jobs.push_back(job_id);
 	return true;
+}
+
+TaskReply Master::getSingleResponse(const std::string& task_type){
+	//default is failed, will get overwritten if successful
+	TaskReply reply;
+	reply.set_task_type("FAIL");
+	void* got_tag;
+	bool ok = false;
+	std::cout << "Calling next" << std::endl;
+	master_cq.Next(&got_tag, &ok);
+	//now, find the correct worker to use
+	std::cout << "Getting worker" << std::endl;
+	AsyncWorkerCall* call = static_cast<AsyncWorkerCall*>(got_tag);
+	workerInfo* worker = call->cur_worker;
+	//w = findWorker((int*)got_tag);
+	std::cout << "Found worker: " << worker->ip_addr << std::endl;
+	GPR_ASSERT(ok);
+
+	if(call->rpc_status.ok()){
+		std::cout << "Successful " << task_type << " for " << worker->ip_addr << std::endl;
+		worker->state = IDLE;
+		worker->heartbeats = 0;
+		//increment the number of shards mapped only if this was a job that hasn't already been completed
+		reply = call->reply;
+	}
+	else{
+		std::cout << "---------------ERROR IN " << task_type << " FOR " << worker->ip_addr << std::endl;
+		std::cout << call->rpc_status.error_code() << std::endl;
+		std::cout << call->rpc_status.error_message() << std::endl;
+	}
+
+	return reply;
 }
