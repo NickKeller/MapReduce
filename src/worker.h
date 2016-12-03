@@ -5,6 +5,7 @@
 #include <grpc++/grpc++.h>
 #include "mr_tasks.h"
 #include "masterworker.grpc.pb.h"
+#include <fstream>
 
 
 using grpc::Server;
@@ -108,8 +109,8 @@ class Worker {
 						new CallData(service_,cq_,MAP);
 						task_reply.set_task_type("MAP");
                         std::cout << "MAPPING"<< std::endl;
+                        //TODO pass the username as a string, not hard-coding cs6210
                         auto mapper = get_mapper_from_task_factory("cs6210");
-                        //mapper->map("some_input_map");
 						//print out the details of the map, then quit
 						std::cout << "Map details:" << std::endl;
 						std::cout << "Job ID: " << map_req.job_id() << std::endl;
@@ -120,6 +121,21 @@ class Worker {
 							std::cout << "\tFile Name: " << shardpiece.file_name() << std::endl;
 							std::cout << "\tStart Index: " << shardpiece.start_index() << std::endl;
 							std::cout << "\tEnd Index: " << shardpiece.end_index() << std::endl;
+
+                            // open the file, defaults to read
+                            std::ifstream file_shard(shardpiece.file_name());
+                            // advance to the position
+                            file_shard.seekg(shardpiece.start_index());
+                            while((file_shard.tellg() < shardpiece.end_index()) && file_shard.good())
+                            {
+                                //pass lines to map
+                                std::string line; 
+                                std::getline(file_shard, line);
+                                mapper->map(line);
+                                // map calls emit
+                                // emit puts the key/ val into a map
+                            }
+                            //TODO write the BaseMapperInteral Structure to disk
 						}
                         status_ = FINISH;
                         map_responder.Finish(task_reply, Status::OK, this);
