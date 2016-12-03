@@ -17,6 +17,7 @@ message MapRequest{
     string job_id = 2;
     repeated ShardPiece shard = 3;
     // other stuff as we need it
+	int32 num_reducers = 4;
 }
 
 message ShardPiece{
