@@ -17,6 +17,7 @@ message MapRequest{
     string job_id = 2;
     repeated ShardPiece shard = 3;
     // other stuff as we need it
+	int32 num_reducers = 4;
 }
 
 message ShardPiece{
@@ -34,11 +35,15 @@ message TaskReply{
     // other stuff as we need it
 
     //the type of task that is returned
+    //Either MAP, REDUCE, or PING
     string task_type = 3;
 }
 
 message ReduceRequest{
     string user_id = 1;
+    //the file to output to
     string output_file = 2;
     string job_id = 3;
+    //the list of input files that the reducer has to read from
+    repeated string input_files = 4;
 }

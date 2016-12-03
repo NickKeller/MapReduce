@@ -90,6 +90,7 @@ class Worker {
                         std::cout << "Pinging"<< std::endl;
 
                         status_ = FINISH;
+						task_reply.set_task_type("PING");
                         ping_responder.Finish(task_reply, Status::OK, this);
                     } else {
                         GPR_ASSERT(status_ == FINISH);
@@ -138,6 +139,10 @@ class Worker {
                             //TODO write the BaseMapperInteral Structure to disk
 						}
                         status_ = FINISH;
+						task_reply.set_task_type("MAP");
+						task_reply.set_job_id(map_req.job_id());
+						//the out file needs to be different, it should be worker_address_job_id
+						task_reply.set_out_file(map_req.job_id());
                         map_responder.Finish(task_reply, Status::OK, this);
                     } else {
                         GPR_ASSERT(status_ == FINISH);
@@ -162,8 +167,15 @@ class Worker {
 						std::cout << "Reduce Details:" << std::endl;
 						std::cout << "Job ID: " << reduce_req.job_id() << std::endl;
 						std::cout << "Output file: " << reduce_req.output_file() << std::endl;
-
+						std::cout << "Input files: " << std::endl;
+						for (size_t i = 0; i < reduce_req.input_files_size(); i++) {
+							std::cout << "\t" << reduce_req.input_files(i) << std::endl;
+						}
                         status_ = FINISH;
+						task_reply.set_task_type("REDUCE");
+						task_reply.set_job_id(reduce_req.job_id());
+						//the out file needs to be different, it should be worker_address_job_id
+						task_reply.set_out_file(reduce_req.job_id());
                         reduce_responder.Finish(task_reply, Status::OK, this);
                     } else {
                         GPR_ASSERT(status_ == FINISH);
