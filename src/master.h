@@ -115,6 +115,7 @@ Master::Master(const MapReduceSpec& mr_spec, const std::vector<FileShard>& file_
 		workers.push_back(worker);
 		std::cout << "Worker with ipAddr " << worker->ip_addr << " added" << std::endl;
 	}
+	//set to 30 seconds
 	heartbeat_limit = 5*30;
 
 	//populate the output files vector
@@ -331,6 +332,7 @@ void Master::assignMapTask(workerInfo* worker){
 	}
 	std::string jobID = "map_" + std::to_string(worker->shard.shard_id);
 	request.set_job_id(jobID);
+	request.set_num_reducers(spec.num_output_files);
 	worker->job_id = jobID;
 	std::cout << "Assigning map task to " << worker->ip_addr << std::endl;
 	//sync
