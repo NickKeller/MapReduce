@@ -46,4 +46,5 @@ message ReduceRequest{
     string job_id = 3;
     //the list of input files that the reducer has to read from
     repeated string input_files = 4;
+    string section = 5;
 }

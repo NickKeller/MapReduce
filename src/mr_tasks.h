@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <sstream>
 #include <iostream>
 #include <fstream>
 #include <map>
@@ -92,11 +93,11 @@ struct BaseReducerInternal {
 		void emit(const std::string& key, const std::string& val);
 
 		/* NOW you can add below, data members and member functions as per the need of your implementation*/
+        void group_keys();
         
-        std::string emit_fname;
-        std::string intermediat_fname;
-        // Logan - make a member for the filename
-        // Logan - sort the keys
+        std::string final_file;
+        std::vector<std::string> temp_files;
+        std::map<std::string, std::vector<std::string>> pairs;
 };
 
 
@@ -108,6 +109,34 @@ inline BaseReducerInternal::BaseReducerInternal() {
 
 /* CS6210_TASK Implement this function */
 inline void BaseReducerInternal::emit(const std::string& key, const std::string& val) {
-    // append key and value to io stream
-	std::cout << "Dummy emit by BaseReducerInternal: " << key << ", " << val << std::endl;
+    // open filename for appending
+    std::ofstream out(final_file, std::ios::app);
+
+	out <<  key << ", " << val << std::endl;
 }
+
+inline void BaseReducerInternal::group_keys(){
+    // parse temp_files into pairs structure
+    for(auto file_name : temp_files){
+        std::ifstream temp_file(file_name);
+        for(std::string line; std::getline(temp_file,line);){
+
+            std::istringstream parse(line);
+            std::string key;
+            std::getline(parse, key, ':');
+
+            // if the key isn't in the map, add it
+            auto missing = pairs.find(key);
+            if( missing == pairs.end()){
+                std::vector<std::string> vec;
+                pairs.emplace(key,vec);
+            }
+            //push_back vals to the vector
+            for(std::string val; std::getline(parse,val,',');){
+                pairs.at(key).push_back(val);
+            }
+            
+        }//for line in file
+    }//for file in files
+}
+

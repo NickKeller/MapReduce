@@ -92,7 +92,7 @@ class Master {
 		//private functions
 		WorkerStatus pingWorkerProcess(const workerInfo* worker);
 		void assignMapTask(workerInfo* worker);
-		void assignReduceTask(workerInfo* worker);
+		void assignReduceTask(workerInfo* worker, int section);
 		bool allWorkersDead(void);
 		bool newJob(const std::string& job_id);
 		TaskReply getSingleResponse(const std::string& task_type);
@@ -259,7 +259,7 @@ bool Master::run() {
 				std::cout << "Assigned reduce: " << worker->output_file << " to worker process: " << worker->ip_addr << std::endl;
 				last_reduce_assigned++;
 				//fire off a map task
-				assignReduceTask(worker);
+				assignReduceTask(worker, i);
 			}
 			else if(output_files.size() == 0){
 				std::cout << "All reduce tasks assigned" << std::endl;
@@ -349,13 +349,14 @@ void Master::assignMapTask(workerInfo* worker){
 	std::cout << "Returning from assignMapTask" << std::endl;
 }
 
-void Master::assignReduceTask(workerInfo* worker){
+void Master::assignReduceTask(workerInfo* worker, int section ){
 	ReduceRequest request;
 	auto stub = AssignTask::NewStub(grpc::CreateChannel(worker->ip_addr, grpc::InsecureChannelCredentials()));
 	ClientContext context;
 	request.set_user_id("cs6210");
 	request.set_output_file(worker->output_file);
 	request.set_job_id(worker->output_file);
+	request.set_section(std::to_string(section));
 	for(auto input_file : map_output_files){
 		request.add_input_files(input_file);
 	}

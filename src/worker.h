@@ -84,7 +84,6 @@ class Worker {
 
                         service_->RequestPing(&ctx_, &ping_req, &ping_responder, cq_, cq_,
                                 this);
-                        std::cout << "Ping CallData Created" << std::endl;
                     } else if (status_ == PROCESS) {
                         //spawn a new ping calldata to handle new requests
                         new CallData(service_,cq_,PING, worker_id);
@@ -105,7 +104,6 @@ class Worker {
 
                         service_->RequestMap(&ctx_, &map_req, &map_responder, cq_, cq_,
                                 this);
-                        std::cout << "Mapper Call Data Created" << std::endl;
                     } else if (status_ == PROCESS) {
                         //spawn a new map CallData to handle new maps
                         new CallData(service_,cq_,MAP, worker_id);
@@ -158,27 +156,39 @@ class Worker {
 
                         service_->RequestReduce(&ctx_, &reduce_req, &reduce_responder, cq_, cq_,
                                 this);
-                        std::cout << "Reduce CallData Created" << std::endl;
                     } else if (status_ == PROCESS) {
                         //spawn a new map CallData to handle new maps
                         new CallData(service_,cq_,REDUCE, worker_id);
                         std::cout << "REDUCING"<< std::endl;
+                        //TODO pass the username as a string, not hard-coding cs6210
                         auto reducer = get_reducer_from_task_factory("cs6210");
-                        //reducer->reduce("dummy",std::vector<std::string>({"1","1"}));
                         //print out all of the details
                         std::cout << "Reduce Details:" << std::endl;
                         std::cout << "Job ID: " << reduce_req.job_id() << std::endl;
                         std::cout << "Output file: " << reduce_req.output_file() << std::endl;
                         std::cout << "Input files: " << std::endl;
-                        for (size_t i = 0; i < reduce_req.input_files_size(); i++) {
-                            std::cout << "\t" << reduce_req.input_files(i) << std::endl;
+                        reducer->impl_->final_file = reduce_req.output_file();
+                        for (auto i : reduce_req.input_files()) {
+                            // combine filename and reducer number
+                            std::string combined_file_name = i + "_R" + reduce_req.section();
+                            std::cout << "\tAdding file: " << combined_file_name << std::endl;
+                            reducer->impl_->temp_files.push_back(combined_file_name);
+
                         }
+                        std::cout << "Reducer has:"<< reducer->impl_->temp_files.size()<<" files to process"<<std::endl;
+
+                        // gather keys from intermediate files into 1 in-memory data struct named pairs
+                        reducer->impl_->group_keys();
+                        for(auto i : reducer->impl_->pairs){
+                            reducer->reduce(i.first , i.second );
+                        }
+
                         status_ = FINISH;
                         task_reply.set_task_type("REDUCE");
                         task_reply.set_job_id(reduce_req.job_id());
-                        //the out file needs to be different, it should be worker_address_job_id
-                        task_reply.set_out_file(reduce_req.job_id());
+                        task_reply.set_out_file(reduce_req.output_file());
                         reduce_responder.Finish(task_reply, Status::OK, this);
+                        // TODO delete temporary files
                     } else {
                         GPR_ASSERT(status_ == FINISH);
                         delete this;
