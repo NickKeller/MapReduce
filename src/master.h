@@ -320,7 +320,7 @@ WorkerStatus Master::pingWorkerProcess(const workerInfo* worker){
 void Master::assignMapTask(workerInfo* worker){
 	MapRequest request;
 	auto stub = AssignTask::NewStub(grpc::CreateChannel(worker->ip_addr, grpc::InsecureChannelCredentials()));
-	request.set_user_id("cs6210");
+	request.set_user_id(spec.user_id);
 	//special thing to do for shards
 	FileShard shard = worker->shard;
 	for (int i = 0; i < shard.pieces.size(); i++) {
@@ -353,7 +353,7 @@ void Master::assignReduceTask(workerInfo* worker, int section ){
 	ReduceRequest request;
 	auto stub = AssignTask::NewStub(grpc::CreateChannel(worker->ip_addr, grpc::InsecureChannelCredentials()));
 	ClientContext context;
-	request.set_user_id("cs6210");
+	request.set_user_id(spec.user_id);
 	request.set_output_file(worker->output_file);
 	request.set_job_id(worker->output_file);
 	request.set_section(std::to_string(section));

@@ -110,7 +110,7 @@ class Worker {
                         task_reply.set_task_type("MAP");
                         std::cout << "MAPPING"<< std::endl;
                         //TODO pass the username as a string, not hard-coding cs6210
-                        auto mapper = get_mapper_from_task_factory("cs6210");
+                        auto mapper = get_mapper_from_task_factory(map_req.user_id());
                         //print out the details of the map, then quit
                         std::cout << "Map details:" << std::endl;
                         std::cout << "Job ID: " << map_req.job_id() << std::endl;
@@ -161,7 +161,7 @@ class Worker {
                         new CallData(service_,cq_,REDUCE, worker_id);
                         std::cout << "REDUCING"<< std::endl;
                         //TODO pass the username as a string, not hard-coding cs6210
-                        auto reducer = get_reducer_from_task_factory("cs6210");
+                        auto reducer = get_reducer_from_task_factory(reduce_req.user_id());
                         //print out all of the details
                         std::cout << "Reduce Details:" << std::endl;
                         std::cout << "Job ID: " << reduce_req.job_id() << std::endl;
@@ -230,6 +230,7 @@ class Worker {
 }; // Worker Class
 
 Worker::~Worker(){
+    std::cout << "Worker at port:" << port << "had the destructor called" << std::endl;
     task_server->Shutdown();
     task_cq->Shutdown();
 }
