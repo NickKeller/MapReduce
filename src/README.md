@@ -9,9 +9,9 @@ This project was worked on by Nick Keller and Logan Blyth. We both used our Dead
 
 While there was considerable collaboration throughout the primary responsibilities were as follows:
 
-masterworker.proto - Nick and Logan
-master.h - Nick
-worker.h - Logan
-mr_tasks.h - Logan
-file_shark.h - Nick
-mapreduce_spec.h - Nick
+* masterworker.proto - Nick and Logan
+* master.h - Nick
+* worker.h - Logan
+* mr_tasks.h - Logan
+* file_shark.h - Nick
+* mapreduce_spec.h - Nick
