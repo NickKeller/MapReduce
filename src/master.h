@@ -161,6 +161,7 @@ bool Master::run() {
 					FileShard dead_shard = worker->shard;
 					std::cout << "-------------------------Setting shard " << dead_shard.shard_id << " to be redone" << std::endl;
 					shards.push_back(dead_shard);
+                    //TODO clear the shard from worker
 				}
 				worker->state = DEAD;
 			}
@@ -376,7 +377,7 @@ void Master::assignMapTask(workerInfo* worker){
 	std::cout << "Calling finish for job " << worker->job_id << std::endl;
 	call->response_reader->Finish(&call->reply, &call->rpc_status,(void*)call);
 
-	std::cout << "Returning from assignMapTask" << std::endl;
+	std::cout << "Returning from assignMapTask for: "<< worker->ip_addr << std::endl;
 }
 
 void Master::assignReduceTask(workerInfo* worker, int section ){
@@ -403,7 +404,7 @@ void Master::assignReduceTask(workerInfo* worker, int section ){
 	std::cout << "Calling finish for job " << worker->job_id << std::endl;
 	call->response_reader->Finish(&call->reply, &call->rpc_status,(void*)call);
 
-	std::cout << "Returning from assignReduceTask" << std::endl;
+	std::cout << "Returning from assignReduceTask for: "<< worker->ip_addr << std::endl;
 }
 
 bool Master::allWorkersDead(){
@@ -436,8 +437,12 @@ TaskReply Master::getSingleResponse(const std::string& task_type){
 	reply.set_task_type("FAIL");
 	void* got_tag;
 	bool ok = false;
-	std::cout << "Calling next" << std::endl;
-	master_cq.Next(&got_tag, &ok);
+	std::cout << "Calling next, async timeout of 600 milliseconds" << std::endl;
+    std::chrono::system_clock::time_point deadline = std::chrono::system_clock::now() + std::chrono::milliseconds(600);
+    grpc::CompletionQueue::NextStatus cq_status =  master_cq.AsyncNext(&got_tag, &ok,deadline);
+    if(cq_status == grpc::CompletionQueue::TIMEOUT){
+        return reply;
+    }
 	//now, find the correct worker to use
 	std::cout << "Getting worker" << std::endl;
 	AsyncWorkerCall* call = static_cast<AsyncWorkerCall*>(got_tag);
