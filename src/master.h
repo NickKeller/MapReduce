@@ -20,7 +20,8 @@ using masterworker::TaskReply;
 using masterworker::ShardPiece;
 using masterworker::AssignTask;
 
-enum WorkerStatus {MAP, REDUCE, IDLE, DEAD, ALIVE};
+enum WorkerStatus {MAP=0, REDUCE, IDLE, DEAD, ALIVE};
+static const char* WorkerStatusStrings[] = {"MAP", "REDUCE","IDLE","DEAD","ALIVE"};
 
 //some kind of map of shards to worker processes
 struct workerInfo{
@@ -152,17 +153,19 @@ bool Master::run() {
 				}
 			}
 			else{
+				// std::cout << "test" << std::endl;
 				std::cout << "Worker at " << worker->ip_addr << " is DEAD" << std::endl;
 				//pop it's task, if the process was doing something
 				if(worker->state == MAP){
 					//it was busy doing something
 					FileShard dead_shard = worker->shard;
+					std::cout << "-------------------------Setting shard " << dead_shard.shard_id << " to be redone" << std::endl;
 					shards.push_back(dead_shard);
 				}
 				worker->state = DEAD;
 			}
 		}
-
+		//std::cout << "calling all workers to check if they're dead" << std::endl;
 		if(allWorkersDead()){
 			std::cout << "ERROR: ALL WORKER PROCESSES ARE DEAD" << std::endl;
 			return false;
@@ -202,15 +205,27 @@ bool Master::run() {
 
 		//if all shards have been mapped, set the bool to complete
 		if(num_shards_mapped == num_map_tasks_to_do){
+			std::cout << "MAP COMPLETE" << std::endl;
 			map_complete = true;
 		}
 		//wait for finish, reassign processes as needed
 		std::this_thread::sleep_for(std::chrono::milliseconds(heartbeat));
+		//print out worker state
+		for (size_t i = 0; i < workers.size(); i++) {
+			workerInfo* worker = workers.at(i);
+			std::cout << "Worker: " << worker->ip_addr << std::endl;
+			std::cout << "Current State: " << WorkerStatusStrings[worker->state] << std::endl;
+			std::cout << "Current Shard: " << worker->shard.shard_id << std::endl;
+		}
+		std::string blah;
+		//std::cin >> blah;
 	}//end while
 
 	//clear the job ids and the output files
 	jobs.clear();
-
+	std::cout << "---------------------------------------------------------------------------" << std::endl;
+	std::cout << "STARTING REDUCE TASKS" << std::endl;
+	std::cout << "---------------------------------------------------------------------------" << std::endl;
 	//spin up reduce processes
 	bool reduce_complete = false;
 	//fire up as many reduce tasks as nr_output_files
@@ -229,19 +244,25 @@ bool Master::run() {
 			if(state == ALIVE){
 				worker->heartbeats++;
 				std::cout << "Worker at " << worker->ip_addr << " is ALIVE for " << worker->heartbeats << " heartbeats" << std::endl;
+				if(worker->heartbeats > (heartbeat_limit)){
+					std::string stalled_file = worker->output_file;
+					std::cout << "-------------------------Setting shard " << stalled_file << " to be redone" << std::endl;
+					output_files.push_back(stalled_file);
+				}
 			}
 			else{
 				std::cout << "Worker at " << worker->ip_addr << " is DEAD" << std::endl;
 				//was this running a reduce task? If so, reassign the output file it was working on
 				if(worker->state = REDUCE){
 					std::string dead_file = worker->output_file;
+					std::cout << "Reassigning file: " << dead_file << " to be redone" << std::endl;
 					output_files.push_back(dead_file);
 				}
 				worker->state = DEAD;
 			}
 
 		}
-
+		//std::cout << "calling all workers to check if they're dead" << std::endl;
 		if(allWorkersDead()){
 			std::cout << "ERROR: ALL WORKER PROCESSES ARE DEAD" << std::endl;
 			return false;
@@ -285,6 +306,15 @@ bool Master::run() {
 		}
 		//wait for finish, reassign processes as needed
 		std::this_thread::sleep_for(std::chrono::milliseconds(heartbeat));
+		//print out worker state
+		for (size_t i = 0; i < workers.size(); i++) {
+			workerInfo* worker = workers.at(i);
+			std::cout << "Worker: " << worker->ip_addr << std::endl;
+			std::cout << "Current State: " << WorkerStatusStrings[worker->state] << std::endl;
+			std::cout << "Current Shard: " << worker->output_file << std::endl;
+		}
+		std::string blah;
+		//std::cin >> blah;
 	}
 	//time to output the final files
 	std::cout << "Output files:" << std::endl;
@@ -377,13 +407,14 @@ void Master::assignReduceTask(workerInfo* worker, int section ){
 }
 
 bool Master::allWorkersDead(){
-	return false;
 	for (size_t i = 0; i < workers.size(); i++) {
 		workerInfo* worker = workers.at(i);
 		if(worker->state != DEAD){
+			//std::cout << "Found worker: " << worker->ip_addr << " that is alive" << std::endl;
 			return false;
 		}
 	}
+	//std::cout << "All workers are dead" << std::endl;
 	return true;
 }
 

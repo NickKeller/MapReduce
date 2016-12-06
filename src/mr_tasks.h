@@ -94,7 +94,7 @@ struct BaseReducerInternal {
 
 		/* NOW you can add below, data members and member functions as per the need of your implementation*/
         void group_keys();
-        
+
         std::string final_file;
         std::vector<std::string> temp_files;
         std::map<std::string, std::vector<std::string>> pairs;
@@ -135,8 +135,7 @@ inline void BaseReducerInternal::group_keys(){
             for(std::string val; std::getline(parse,val,',');){
                 pairs.at(key).push_back(val);
             }
-            
+
         }//for line in file
     }//for file in files
 }
-
