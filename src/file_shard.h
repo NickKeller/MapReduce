@@ -92,19 +92,27 @@ inline bool shard_files(const MapReduceSpec& mr_spec, std::vector<FileShard>& fi
 			file >> ch;
 		}
 		//no matter what, at the end of a file, push back
-		shard->pieces.push_back(piece);
+		//shard->pieces.push_back(piece);
 		totalsize += size;
 		std::cout << "File: " << filename << " Size: " << size << "B" << std::endl;
 	}
 	shard->shard_id = shard_id;
+	//print out the last shard
+	std::cout << "Shard done, id: " << shard->shard_id << std::endl;
 	fileShards.push_back(*shard);
 
 	//got the total size, now to figure out the number of shards
+	//print out the number of shards:
+	// for(auto shard: fileShards){
+	// 	std::cout << "Shard " << shard.shard_id << " - (";
+	// 	for(auto piece : shard.pieces){
+	// 		std::cout << "(File: " << piece->filename << " - " << piece->startOffset << "-" << piece->endOffset << "),";
+	// 	}
+	// 	std::cout << std::endl;
+	// }
 
 	auto num_shards = ceil(totalsize/(mr_spec.map_kilobytes*1000));
 	std::cout << "Total Size: " << totalsize << ", Number of shards: " << num_shards << std::endl;
 	std::cout << "Actual number of shards: " << fileShards.size() << std::endl;
-	std::cout << "EXIT CALLED AT END OF FILE_SHARD.H, REMOVE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
-	exit(0);
 	return true;
 }
