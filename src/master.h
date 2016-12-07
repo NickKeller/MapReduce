@@ -253,13 +253,13 @@ bool Master::run() {
 			}
 			else{
 				std::cout << "Worker at " << worker->ip_addr << " is DEAD" << std::endl;
+				worker->state = DEAD;
 				//was this running a reduce task? If so, reassign the output file it was working on
-				if(worker->state = REDUCE){
+				if(worker->state == REDUCE){
 					std::string dead_file = worker->output_file;
 					std::cout << "Reassigning file: " << dead_file << " to be redone" << std::endl;
 					output_files.push_back(dead_file);
 				}
-				worker->state = DEAD;
 			}
 
 		}
