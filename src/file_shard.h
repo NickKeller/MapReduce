@@ -104,6 +104,7 @@ inline bool shard_files(const MapReduceSpec& mr_spec, std::vector<FileShard>& fi
 	auto num_shards = ceil(totalsize/(mr_spec.map_kilobytes*1000));
 	std::cout << "Total Size: " << totalsize << ", Number of shards: " << num_shards << std::endl;
 	std::cout << "Actual number of shards: " << fileShards.size() << std::endl;
-
+	std::cout << "EXIT CALLED AT END OF FILE_SHARD.H, REMOVE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+	exit(0);
 	return true;
 }
